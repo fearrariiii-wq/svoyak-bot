@@ -741,7 +741,27 @@ async def go_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     for player_id in room.players:
         await context.bot.send_message(player_id, "▶️ Хост возобновил игру", parse_mode='Markdown')
+async def adminpanel(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
+    keyboard = [[
+        InlineKeyboardButton(
+            "🧠 Открыть AI",
+            web_app=WebAppInfo(
+                url=MINIAPP_URL
+            )
+        )
+    ]]
+
+    await update.message.reply_text(
+        "⚙️ AI Панель",
+        reply_markup=
+        InlineKeyboardMarkup(
+            keyboard
+        )
+    )
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /start"""
     await update.message.reply_text(
@@ -794,6 +814,7 @@ def main():
     
     # Команды
     application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("adminpanel",adminpanel))
     application.add_handler(CommandHandler("create", create_room))
     application.add_handler(CommandHandler("room", join_room))
     application.add_handler(CommandHandler("spectator", join_spectator))
