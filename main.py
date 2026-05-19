@@ -2,7 +2,13 @@ import os
 import random
 import asyncio
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    BotCommand,
+    WebAppInfo
+)
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -12,6 +18,10 @@ from telegram.ext import (
 
 load_dotenv()
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+MINIAPP_URL = os.getenv(
+    "MINIAPP_URL",
+    "https://mybot-7f2f.up.railway.app"
+)
 
 if not TOKEN:
     print("❌ TELEGRAM_BOT_TOKEN не найден!")
