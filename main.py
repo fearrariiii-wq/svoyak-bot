@@ -190,7 +190,7 @@ async def show_room_info(bot, room: GameRoom, user_id: int, is_spectator=False):
     await bot.send_message(user_id, info_text, parse_mode='Markdown')
 
 async def exit_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Выход из комнаты"""
+    """Выход из комнаты (работает ВСЕГДА)"""
     user_id = update.effective_user.id
     
     if user_id not in user_rooms:
@@ -198,14 +198,19 @@ async def exit_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     room_id = user_rooms[user_id]
-    room = rooms[room_id]
     
-    if room.game_started:
-        await update.message.reply_text("❌ Игра уже началась! Ты не можешь выйти")
+    # Проверяем, существует ли комната
+    if room_id not in rooms:
+        del user_rooms[user_id]
+        await update.message.reply_text("✅ Ты вышел из комнаты")
         return
+    
+    room = rooms[room_id]
     
     # Удаляем из игроков или зрителей
     user_name = None
+    is_host = False
+    
     if user_id in room.players:
         user_name = room.players[user_id]["name"]
         del room.players[user_id]
@@ -216,18 +221,48 @@ async def exit_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Удаляем из глобального хранилища
     del user_rooms[user_id]
     
-    # Если комната пустая, удаляем её
-    if len(room.players) == 0 and len(room.spectators) == 0:
+    # Если хост вышел, завершаем игру
+    if room.host_id == user_id:
+        is_host = True
+        # Уведомляем всех остальных
+        exit_message = "❌ *ХОст покинул комнату!*\n\nИгра отменена!"
+        
+        for player_id in room.players:
+            if player_id in user_rooms:
+                await context.bot.send_message(player_id, exit_message, parse_mode='Markdown')
+        
+        for spectator_id in room.spectators:
+            if spectator_id in user_rooms:
+                await context.bot.send_message(spectator_id, exit_message, parse_mode='Markdown')
+        
+        # Очищаем комнату полностью
+        for pid in list(room.players.keys()):
+            if pid in user_rooms:
+                del user_rooms[pid]
+        for sid in list(room.spectators.keys()):
+            if sid in user_rooms:
+                del user_rooms[sid]
+        
         del rooms[room_id]
-        await update.message.reply_text(f"✅ Ты вышел из комнаты. Комната удалена.")
+        await update.message.reply_text("✅ Ты вышел из комнаты. Комната удалена.")
+    
+    # Если комната пустая, удаляем её
+    elif len(room.players) == 0 and len(room.spectators) == 0:
+        del rooms[room_id]
+        await update.message.reply_text("✅ Ты вышел из комнаты. Комната удалена.")
+    
+    # Уведомляем хоста, что участник вышел
     else:
-        # Уведомляем хоста
-        await context.bot.send_message(
-            room.host_id,
-            f"👤 *Участник вышел:* {user_name}\n"
-            f"👥 *Осталось игроков:* {len(room.players)}",
-            parse_mode='Markdown'
-        )
+        try:
+            await context.bot.send_message(
+                room.host_id,
+                f"👤 *Участник вышел:* {user_name}\n"
+                f"👥 *Осталось игроков:* {len(room.players)}",
+                parse_mode='Markdown'
+            )
+        except:
+            pass
+        
         await update.message.reply_text("✅ Ты вышел из комнаты")
 
 async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -303,7 +338,7 @@ async def show_game_table(context: ContextTypes.DEFAULT_TYPE, room: GameRoom):
         themes_text += "\n\n"
     
     # Отправляем всем
-    full_message = players_text + themes_text + "✅ *Игра начинается!*"
+    full_message = players_text + themes_text + "✅ *Игра начинается!*\n\n💡 Помни: /exit работает всегда!"
     
     for player_id in room.players:
         await context.bot.send_message(player_id, full_message, parse_mode='Markdown')
@@ -706,7 +741,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/room НОМЕР - Присоединиться как игрок\n"
         "/spectator НОМЕР - Присоединиться как зритель\n"
         "/game N - Начать игру (N = количество тем)\n"
-        "/exit - Выйти из комнаты\n"
+        "/exit - Выйти из комнаты (работает ВСЕГДА!)\n"
         "/stop - Пауза игры\n"
         "/go - Возобновить игру\n"
         "/end - Завершить игру\n\n"
@@ -727,7 +762,7 @@ async def setup_commands(bot):
             BotCommand("room", "Присоединиться как игрок"),
             BotCommand("spectator", "Присоединиться как зритель"),
             BotCommand("game", "Начать игру"),
-            BotCommand("exit", "Выйти из комнаты"),
+            BotCommand("exit", "Выйти из комнаты (ВСЕГДА!)"),
             BotCommand("stop", "Пауза"),
             BotCommand("go", "Возобновить"),
             BotCommand("end", "Завершить"),
