@@ -34,6 +34,8 @@ class GameRoom:
         self.current_theme = 1
         self.current_question = 0
         self.paused = False
+        self.blocked_players = {}  # {(theme, points): [user_id1, user_id2, ...]}
+        self.answered_players = {}  # {(theme, points): [user_id1, user_id2, ...]}
 
 async def create_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Создание новой комнаты"""
@@ -362,6 +364,12 @@ async def question_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     room.questions[theme][points] = True
     room.current_question = points
     
+    # Инициализируем списки для этого вопроса
+    question_key = (theme, points)
+    if question_key not in room.blocked_players:
+        room.blocked_players[question_key] = []
+        room.answered_players[question_key] = []
+    
     # Кнопка "Время"
     keyboard = [[InlineKeyboardButton("⏱️ Время", callback_data=f"time_{room_id}_{theme}_{points}")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -389,8 +397,9 @@ async def time_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     room = rooms[room_id]
+    question_key = (theme, points)
     
-    # Кнопка "+" для игроков
+    # Кнопка ответа для игроков
     keyboard = [[InlineKeyboardButton("➕ Ответить", callback_data=f"answer_{room_id}_{theme}_{points}")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -448,14 +457,26 @@ async def answer_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     room = rooms[room_id]
+    question_key = (theme, points)
     
     if user_id not in room.players:
         await query.edit_message_text("❌ Ты не игрок!")
         return
     
-    user_name = room.players[user_id]["name"]
+    # Проверяем, заблокирован ли игрок на этом вопросе
+    if user_id in room.blocked_players.get(question_key, []):
+        await query.edit_message_text("❌ *Ты уже ответил неправильно!*\nТы больше не можешь отвечать на этот вопрос.", parse_mode='Markdown')
+        return
     
-    # Кнопки оценки
+    # Проверяем, уже ли ответил
+    if user_id in room.answered_players.get(question_key, []):
+        await query.edit_message_text("⏳ *Ты уже ответил!*\nЖди оценки хоста...", parse_mode='Markdown')
+        return
+    
+    user_name = room.players[user_id]["name"]
+    room.answered_players[question_key].append(user_id)
+    
+    # Кнопки оценки для хоста
     keyboard = [
         [
             InlineKeyboardButton("✅ Верно", callback_data=f"correct_{room_id}_{theme}_{points}_{user_id}"),
@@ -481,6 +502,7 @@ async def correct_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     data_parts = query.data.split('_')
     room_id = int(data_parts[1])
+    theme = int(data_parts[2])
     points = int(data_parts[3])
     user_id = int(data_parts[4])
     
@@ -500,6 +522,7 @@ async def wrong_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     data_parts = query.data.split('_')
     room_id = int(data_parts[1])
+    theme = int(data_parts[2])
     points = int(data_parts[3])
     user_id = int(data_parts[4])
     
@@ -507,10 +530,25 @@ async def wrong_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     room = rooms[room_id]
+    question_key = (theme, points)
+    
+    # Блокируем игрока на этом вопросе
+    if user_id not in room.blocked_players[question_key]:
+        room.blocked_players[question_key].append(user_id)
+    
     room.players[user_id]["score"] -= points
     
     await show_scores(context, room)
-    await query.edit_message_text("❌ *Ответ не засчитан!*", parse_mode='Markdown')
+    await query.edit_message_text("❌ *Ответ не засчитан!*\n\nИгрок заблокирован на этом вопросе.", parse_mode='Markdown')
+    
+    # Отправляем уведомление заблокированному игроку
+    player_name = room.players[user_id]["name"]
+    await context.bot.send_message(
+        user_id,
+        f"❌ *Твой ответ был неправильным!*\n\n"
+        f"Ты больше не можешь отвечать на этот вопрос.",
+        parse_mode='Markdown'
+    )
 
 async def show_scores(context: ContextTypes.DEFAULT_TYPE, room: GameRoom):
     """Показать текущие очки"""
