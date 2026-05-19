@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta
+name="viewport"
+content="width=device-width">
+
+<style>
+
+body{
+background:#111;
+color:white;
+font-family:Arial;
+padding:15px
+}
+
+#chat{
+
+height:70vh;
+overflow:auto;
+border:1px solid gray;
+padding:10px;
+margin-bottom:10px
+
+}
+
+input{
+width:80%;
+padding:10px
+}
+
+button{
+padding:10px
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h2>AI Admin</h2>
+
+<div id="chat"></div>
+
+<input id="msg">
+
+<button onclick="send()">
+Отправить
+</button>
+
+<script>
+
+async function send(){
+
+let text=
+msg.value
+
+let r=
+await fetch(
+"/chat",
+{
+
+method:"POST",
+
+headers:{
+"Content-Type":
+"application/json"
+},
+
+body:
+JSON.stringify({
+
+message:text
+
+})
+
+})
+
+let data=
+await r.json()
+
+chat.innerHTML+=
+
+"<p><b>Ты:</b> "
++text+
+"</p>"
+
++
+"<p><b>ИИ:</b> "
++data
+.choices[0]
+.message
+.content
++"</p>"
+
+msg.value=""
+
+}
+
+</script>
+
+</body>
+</html>
