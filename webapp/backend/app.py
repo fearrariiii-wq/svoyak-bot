@@ -15,6 +15,7 @@ app = FastAPI()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 ADMIN_TOKENS = [t.strip() for t in os.getenv("ADMIN_TOKENS", "").split(',') if t.strip()]
+# ADMIN_USER_IDS is intentionally supported but NOT enforced — admin panel is open to anyone who can access it.
 ADMIN_USER_IDS = [int(t.strip()) for t in os.getenv("ADMIN_USER_IDS", "").split(',') if t.strip()]
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -132,11 +133,12 @@ def check_telegram_init_data(init_data: str) -> dict:
 
 def create_jwt_for_user(user_id: int) -> str:
     now = datetime.utcnow()
+    # For this project the admin panel is intentionally open — any authenticated WebApp user will receive an admin JWT.
     payload = {
         "sub": str(user_id),
         "iat": now,
         "exp": now + timedelta(minutes=JWT_EXPIRE_MINUTES),
-        "is_admin": user_id in ADMIN_USER_IDS
+        "is_admin": True
     }
     token = jwt.encode(payload, ADMIN_JWT_SECRET, algorithm="HS256")
     return token
@@ -154,11 +156,9 @@ def verify_jwt(token: str) -> dict:
 
 @app.post('/api/auth/init')
 async def auth_init(body: InitAuthRequest):
-    """Verify Telegram WebApp init_data, and if user_id is in ADMIN_USER_IDS return a short-lived JWT.
-    Frontend should send raw init_data string that Telegram provides to WebApp.
-    """
+    """Verify Telegram WebApp init_data, and return a short-lived JWT. Admin_user restriction is disabled — any WebApp user will receive a JWT if init_data is valid."""
     parsed = check_telegram_init_data(body.init_data)
-    # parsed contains keys as strings, user id under 'user' is JSON; but Telegram provides 'user' as JSON object string.
+    # parsed contains keys as strings, user id under 'user' is JSON; Telegram provides 'user' as a JSON string.
     user_raw = parsed.get('user')
     if not user_raw:
         raise HTTPException(status_code=400, detail="init_data missing user")
@@ -170,9 +170,7 @@ async def auth_init(body: InitAuthRequest):
 
     user_id = int(user_obj.get('id'))
 
-    # Allow only configured admin users
-    if ADMIN_USER_IDS and user_id not in ADMIN_USER_IDS:
-        raise HTTPException(status_code=403, detail="User not allowed")
+    # NOTE: ADMIN_USER_IDS check intentionally omitted — this WebApp is private and the panel is intended for your use only.
 
     token = create_jwt_for_user(user_id)
     return {"jwt": token, "expires_in_minutes": JWT_EXPIRE_MINUTES}
@@ -311,4 +309,4 @@ async def ai_edit(req: EditRequest, request: Request):
 
 @app.get('/api/status')
 async def status():
-    return {"status": "ok", "openai": bool(OPENAI_API_KEY), "github": bool(GITHUB_TOKEN), "admin_tokens": len(ADMIN_TOKENS), "admin_user_ids": len(ADMIN_USER_IDS)}
+    return {"status": "ok", "openai": bool(OPENAI_API_KEY), "github": bool(GITHUB_TOKEN), "admin_tokens": len(ADMIN_TOKENS), "admin_panel": "open"}
