@@ -171,7 +171,7 @@ async def join_spectator(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
     
-    # Показываем комнату зрителю
+    # Показываем комнату ��рителю
     await show_room_info(context.bot, room, user_id, is_spectator=True)
 
 async def show_room_info(bot, room: GameRoom, user_id: int, is_spectator=False):
@@ -411,11 +411,25 @@ async def question_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Инициализируем списки для этого вопроса
     question_key = (theme, points)
-    if question_key not in room.blocked_players:
-        room.blocked_players[question_key] = []
-        room.answered_players[question_key] = []
-    
-    # Кнопка "Время"
+    room.blocked_players.setdefault(question_key, [])
+    room.answered_players.setdefault(question_key, [])
+
+    # Отправляем игрокам кнопку ответа сразу — чтобы они могли отвечать во время чтения
+    players_reply = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("➕ Ответить", callback_data=f"answer_{room_id}_{theme}_{points}")]]
+    )
+    for player_id in room.players:
+        try:
+            await context.bot.send_message(
+                player_id,
+                "📖 *Хост читает вопрос.*\n\nЕсли хочешь ответить — нажми кнопку!",
+                reply_markup=players_reply,
+                parse_mode='Markdown'
+            )
+        except Exception:
+            pass
+
+    # Кнопка "Время" для хоста
     keyboard = [[InlineKeyboardButton("⏱️ Время", callback_data=f"time_{room_id}_{theme}_{points}")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -443,19 +457,24 @@ async def time_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     room = rooms[room_id]
     question_key = (theme, points)
+    room.blocked_players.setdefault(question_key, [])
+    room.answered_players.setdefault(question_key, [])
     
     # Кнопка ответа для игроков
     keyboard = [[InlineKeyboardButton("➕ Ответить", callback_data=f"answer_{room_id}_{theme}_{points}")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     for player_id in room.players:
-        await context.bot.send_message(
-            player_id,
-            "⏱️ *ВРЕМЯ!*\n\n"
-            "⏳ У тебя есть 10 секунд чтобы ответить!",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
+        try:
+            await context.bot.send_message(
+                player_id,
+                "⏱️ *ВРЕМЯ!*\n\n"
+                "⏳ У тебя есть 10 секунд чтобы ответить!",
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        except Exception:
+            pass
     
     # Отсчет для хоста
     for i in range(10, 0, -1):
@@ -503,6 +522,8 @@ async def answer_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     room = rooms[room_id]
     question_key = (theme, points)
+    room.blocked_players.setdefault(question_key, [])
+    room.answered_players.setdefault(question_key, [])
     
     if user_id not in room.players:
         await query.edit_message_text("❌ Ты не игрок!")
@@ -576,6 +597,8 @@ async def wrong_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     room = rooms[room_id]
     question_key = (theme, points)
+    room.blocked_players.setdefault(question_key, [])
+    room.answered_players.setdefault(question_key, [])
     
     # Блокируем игрока на этом вопросе
     if user_id not in room.blocked_players[question_key]:
@@ -588,12 +611,15 @@ async def wrong_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Отправляем уведомление заблокированному игроку
     player_name = room.players[user_id]["name"]
-    await context.bot.send_message(
-        user_id,
-        f"❌ *Твой ответ был неправильным!*\n\n"
-        f"Ты больше не можешь отвечать на этот вопрос.",
-        parse_mode='Markdown'
-    )
+    try:
+        await context.bot.send_message(
+            user_id,
+            f"❌ *Твой ответ был неправильным!*\n\n"
+            f"Ты больше не можешь отвечать на этот вопрос.",
+            parse_mode='Markdown'
+        )
+    except Exception:
+        pass
 
 async def show_scores(context: ContextTypes.DEFAULT_TYPE, room: GameRoom):
     """Показать текущие очки"""
@@ -605,12 +631,21 @@ async def show_scores(context: ContextTypes.DEFAULT_TYPE, room: GameRoom):
         score_text += f"{emoji} {pdata['name']}: **{pdata['score']}** очков\n"
     
     for player_id in room.players:
-        await context.bot.send_message(player_id, score_text, parse_mode='Markdown')
+        try:
+            await context.bot.send_message(player_id, score_text, parse_mode='Markdown')
+        except Exception:
+            pass
     
     for spectator_id in room.spectators:
-        await context.bot.send_message(spectator_id, score_text, parse_mode='Markdown')
+        try:
+            await context.bot.send_message(spectator_id, score_text, parse_mode='Markdown')
+        except Exception:
+            pass
     
-    await context.bot.send_message(room.host_id, score_text, parse_mode='Markdown')
+    try:
+        await context.bot.send_message(room.host_id, score_text, parse_mode='Markdown')
+    except Exception:
+        pass
 
 async def show_theme_transition(context: ContextTypes.DEFAULT_TYPE, room: GameRoom):
     """Переход между темами"""
@@ -625,12 +660,21 @@ async def show_theme_transition(context: ContextTypes.DEFAULT_TYPE, room: GameRo
     theme_text += f"\n⏳ Начинаем тему {room.current_theme + 1}..."
     
     for player_id in room.players:
-        await context.bot.send_message(player_id, theme_text, parse_mode='Markdown')
+        try:
+            await context.bot.send_message(player_id, theme_text, parse_mode='Markdown')
+        except Exception:
+            pass
     
     for spectator_id in room.spectators:
-        await context.bot.send_message(spectator_id, theme_text, parse_mode='Markdown')
+        try:
+            await context.bot.send_message(spectator_id, theme_text, parse_mode='Markdown')
+        except Exception:
+            pass
     
-    await context.bot.send_message(room.host_id, theme_text, parse_mode='Markdown')
+    try:
+        await context.bot.send_message(room.host_id, theme_text, parse_mode='Markdown')
+    except Exception:
+        pass
     
     await asyncio.sleep(3)
     
@@ -655,12 +699,21 @@ async def show_final_score(context: ContextTypes.DEFAULT_TYPE, room: GameRoom):
     final_text += "\n✅ *Игра завершена!*"
     
     for player_id in room.players:
-        await context.bot.send_message(player_id, final_text, parse_mode='Markdown')
+        try:
+            await context.bot.send_message(player_id, final_text, parse_mode='Markdown')
+        except Exception:
+            pass
     
     for spectator_id in room.spectators:
-        await context.bot.send_message(spectator_id, final_text, parse_mode='Markdown')
+        try:
+            await context.bot.send_message(spectator_id, final_text, parse_mode='Markdown')
+        except Exception:
+            pass
     
-    await context.bot.send_message(room.host_id, final_text, parse_mode='Markdown')
+    try:
+        await context.bot.send_message(room.host_id, final_text, parse_mode='Markdown')
+    except Exception:
+        pass
     
     # Очищаем комнату
     del rooms[room.room_id]
@@ -715,7 +768,10 @@ async def stop_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("⏸️ *Игра на паузе!*", parse_mode='Markdown')
     
     for player_id in room.players:
-        await context.bot.send_message(player_id, "⏸️ Хост поставил игру на паузу", parse_mode='Markdown')
+        try:
+            await context.bot.send_message(player_id, "⏸️ Хост поставил игру на паузу", parse_mode='Markdown')
+        except Exception:
+            pass
 
 async def go_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Возобновить"""
@@ -740,7 +796,10 @@ async def go_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("▶️ *Игра возобновлена!*", parse_mode='Markdown')
     
     for player_id in room.players:
-        await context.bot.send_message(player_id, "▶️ Хост возобновил игру", parse_mode='Markdown')
+        try:
+            await context.bot.send_message(player_id, "▶️ Хост возобновил игру", parse_mode='Markdown')
+        except Exception:
+            pass
 async def adminpanel(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -771,7 +830,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/room НОМЕР - Присоединиться как игрок\n"
         "/spectator НОМЕР - Присоединиться как зритель\n"
         "/game N - Начать игру (N = количество тем)\n"
-        "/exit - Выйти из комнаты (работает ВСЕГДА!)\n"
+        "/exit - Выйти из комнате (работает ВСЕГДА!)\n"
         "/stop - Пауза игры\n"
         "/go - Возобновить игру\n"
         "/end - Завершить игру\n\n"
